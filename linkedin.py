@@ -22,7 +22,7 @@ KEYWORDS = [
     # "Python Developer",
 ]
 GEO_ID = 101165590          # United Kingdom
-PAGES = 3                   # 10 jobs per page
+PAGES = 5                   # 10 jobs per page
 SECONDS = 86400             # 3600 = last hour, 86400 = last 24 hours
 EXPERIENCE_LEVEL = "2"      # "1" internship, "2" entry level, "3" associate, or None
 EXCLUDE_WORDS = ("senior", "lead", "principal", "staff", "manager", "head of")
