@@ -18,29 +18,41 @@ HEADERS = {
 # ---- Settings -------------------------------------------------------------
 KEYWORDS = [
     # "Mechanical Engineer",
-    "Junior Software Engineer"
+    "Junior Software Engineer",
     # "Full Stack Developer",
     # "Python Developer",
-    # "cyber security analyst"
+    # "cyber security analyst",
 ]
-GEO_ID = 101165590          # United Kingdom
+
+# Each location is either a geoId or a free-text location (+ optional distance in miles)
+LOCATIONS = [
+    {"name": "Manchester", "location": "Manchester, England, United Kingdom", "distance": 25},
+    {"name": "United Kingdom", "geoId": 101165590},
+]
+
+DISTANCE = 25                # miles around each typed location
 PAGES = 10                   # 10 jobs per page
 SECONDS = 604800             # 3600 = last hour, 86400 = last 24 hours, 604800 = 1 week
-EXPERIENCE_LEVEL = "3"      # "1" internship, "2" entry level, "3" associate, or None
+EXPERIENCE_LEVEL = "2,3"     # "1" internship, "2" entry level, "3" associate, "2,3" both, or None
 EXCLUDE_WORDS = ("senior", "lead", "principal", "staff", "manager", "head of")
 # ---------------------------------------------------------------------------
 
 
-def scrape_jobs(keywords, geo_id, pages=3, seconds=86400, experience=None):
+def scrape_jobs(keywords, loc, pages=3, seconds=86400, experience=None):
     jobs = []
     for page in range(pages):
         params = {
             "keywords": keywords,
-            "geoId": geo_id,
             "start": page * 10,
             "f_TPR": f"r{seconds}",
             "sortBy": "DD",
         }
+        if "geoId" in loc:
+            params["geoId"] = loc["geoId"]
+        else:
+            params["location"] = loc["location"]
+            if loc.get("distance"):
+                params["distance"] = loc["distance"]
         if experience:
             params["f_E"] = experience
 
@@ -72,17 +84,18 @@ def scrape_jobs(keywords, geo_id, pages=3, seconds=86400, experience=None):
     return jobs
 
 
-def scrape_many(keyword_list, geo_id, pages=3, seconds=86400, experience=None):
+def scrape_many(keyword_list, locations, pages=3, seconds=86400, experience=None):
     seen = set()
     all_jobs = []
     for kw in keyword_list:
-        print(f"Searching: {kw}")
-        for job in scrape_jobs(kw, geo_id, pages=pages, seconds=seconds, experience=experience):
-            if job["url"] and job["url"] in seen:
-                continue
-            seen.add(job["url"])
-            job["search"] = kw
-            all_jobs.append(job)
+        for loc in locations:
+            print(f"Searching: {kw} in {loc['name']}")
+            for job in scrape_jobs(kw, loc, pages=pages, seconds=seconds, experience=experience):
+                if job["url"] and job["url"] in seen:
+                    continue
+                seen.add(job["url"])
+                job["search"] = f"{kw} / {loc['name']}"
+                all_jobs.append(job)
     return all_jobs
 
 
@@ -93,7 +106,12 @@ def filter_jobs(jobs, exclude_words):
     ]
 
 
-EXPERIENCE_NAMES = {"1": "Internship", "2": "Entry level", "3": "Associate"}
+EXPERIENCE_NAMES = {
+    "1": "Internship",
+    "2": "Entry level",
+    "3": "Associate",
+    "2,3": "Entry level / Associate",
+}
 
 
 def describe_period(seconds):
@@ -114,8 +132,9 @@ def make_filename(keywords):
     return f"jobs_{name}.html"
 
 
-def save_html(jobs, keywords, seconds, experience, filename):
+def save_html(jobs, keywords, locations, seconds, experience, filename):
     heading = html.escape(", ".join(keywords))
+    where = html.escape(", ".join(l["name"] for l in locations))
     period = describe_period(seconds)
     level = EXPERIENCE_NAMES.get(experience)
     level_text = f" ({level})" if level else ""
@@ -151,7 +170,7 @@ def save_html(jobs, keywords, seconds, experience, filename):
     </style>
 </head>
 <body>
-    <h1>{heading}{level_text} jobs, {period} ({len(jobs)})</h1>
+    <h1>{heading}{level_text} jobs in {where}, {period} ({len(jobs)})</h1>
     <table>
         <tr><th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Search</th></tr>
         {rows}
@@ -168,8 +187,31 @@ def save_html(jobs, keywords, seconds, experience, filename):
         webbrowser.open(path.as_uri())  # macOS / Linux
 
 
+def ask_locations():
+    """Let the user type locations, e.g. 'Manchester, Leeds, London'. Blank = defaults."""
+    print("Type any place in the world. Separate several with a semicolon (;).")
+    print("Add the country to avoid mix-ups, e.g.  Berlin, Germany; Toronto, Canada; Dubai; Worldwide")
+    raw = input("Locations (blank = defaults): ").strip()
+    if not raw:
+        return LOCATIONS
+    locs = []
+    for name in raw.split(";"):
+        name = name.strip()
+        if not name:
+            continue
+        low = name.lower()
+        if low in ("uk", "united kingdom"):
+            locs.append({"name": "United Kingdom", "geoId": 101165590})
+        elif low in ("worldwide", "world", "global", "anywhere"):
+            locs.append({"name": "Worldwide", "location": "Worldwide"})
+        else:
+            locs.append({"name": name, "location": name, "distance": DISTANCE})
+    return locs or LOCATIONS
+
+
 if __name__ == "__main__":
-    results = scrape_many(KEYWORDS, GEO_ID, pages=PAGES, seconds=SECONDS,
+    LOCATIONS = ask_locations()
+    results = scrape_many(KEYWORDS, LOCATIONS, pages=PAGES, seconds=SECONDS,
                           experience=EXPERIENCE_LEVEL)
     print(f"Found {len(results)} unique jobs")
 
@@ -179,4 +221,4 @@ if __name__ == "__main__":
     for job in results:
         print(job["title"], "-", job["company"], "-", job["location"])
 
-    save_html(results, KEYWORDS, SECONDS, EXPERIENCE_LEVEL, make_filename(KEYWORDS))
+    save_html(results, KEYWORDS, LOCATIONS, SECONDS, EXPERIENCE_LEVEL, make_filename(KEYWORDS))
